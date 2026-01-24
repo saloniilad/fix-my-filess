@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Compressor</title>
+</head>
+<body>
+
+<h2>Image Compressor</h2>
+
+<form action="/image-compress/process" method="POST" enctype="multipart/form-data">
+    <input type="file" name="image" accept="image/*" required>
+    <br><br>
+
+    <label>Quality (10–90):</label>
+    <input type="number" name="quality" value="60" min="10" max="90">
+    <br><br>
+
+    <button type="submit">Compress & Download</button>
+</form>
+
+<br>
+<a href="/">← Back to PDF Merger</a>
+
+</body>
+</html>
