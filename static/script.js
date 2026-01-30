@@ -1,3 +1,10 @@
+// ==================== SAFETY LIMITS (Render Free Tier) ====================
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const MAX_PDF_MERGE_FILES = 10;
+const MAX_IMAGES_TO_PDF = 15;
+let isProcessing = false;
+
+
 // Global variables
 let selectedFiles = [];
 let splitPdfFile = null;
@@ -44,6 +51,25 @@ const imagesToPdfStatus = document.getElementById('imagesToPdfStatus');
 // Initialize
 initializeDragAndDrop();
 initializeSplitMode();
+
+function validateFilesSize(files) {
+    for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+            alert(`"${file.name}" is too large.\nMax allowed size is 25MB.`);
+            return false;
+        }
+    }
+    return true;
+}
+
+function validateFileCount(files, max, label) {
+    if (files.length > max) {
+        alert(`Too many ${label}.\nMax allowed: ${max}`);
+        return false;
+    }
+    return true;
+}
+
 
 // ==================== PDF MERGER ====================
 
@@ -129,23 +155,27 @@ function handleFileSelect(e) {
 
 // Add files to the list
 function addFiles(files) {
+    if (!validateFilesSize(files)) return;
+    if (!validateFileCount(files, MAX_PDF_MERGE_FILES, "PDFs")) return;
+
     const pdfFiles = files.filter(file => file.type === 'application/pdf');
-    
+
     if (pdfFiles.length !== files.length) {
         showStatus('PDFs only. We have standards (sort of).', 'error');
         return;
     }
-    
+
     pdfFiles.forEach(file => {
         if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
             selectedFiles.push(file);
         }
     });
-    
+
     updateFileList();
     updateMergeButton();
     fileInput.value = '';
 }
+
 
 // Update file list display
 function updateFileList() {
@@ -192,6 +222,9 @@ function updateMergeButton() {
 
 // Merge PDFs
 async function mergePDFs() {
+    if (isProcessing) return;
+    isProcessing = true;
+
     if (selectedFiles.length < 2) {
         showStatus('Two PDFs minimum. This isn\'t rocket science.', 'error');
         return;
@@ -217,10 +250,15 @@ async function mergePDFs() {
             }
         }, 200);
         
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), 110000); // 110s
+
         const response = await fetch('/merge', {
             method: 'POST',
-            body: formData
+            body: formData,
+            signal: controller.signal
         });
+
         
         clearInterval(progressInterval);
         updateProgress(100);
@@ -246,14 +284,19 @@ async function mergePDFs() {
             showStatus(`Well, that didn't work: ${errorData.error || 'Unknown error'}`, 'error');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showStatus('Something broke. Classic technology. Try again?', 'error');
+        if (error.name === 'AbortError') {
+            showStatus('This took too long. Try smaller PDFs.', 'error');
+        } else {
+            console.error(error);
+            showStatus('Something broke. Classic technology.', 'error');
+        }
     } finally {
         hideProgress();
         mergeBtn.disabled = false;
         mergeBtn.innerHTML = '<i class="fas fa-compress-alt"></i> Merge These Bad Boys';
         mergeBtn.classList.remove('processing');
         updateMergeButton();
+        isProcessing = false;
     }
 }
 
@@ -486,23 +529,27 @@ function handleImagesToPdfSelect(e) {
 }
 
 function addImagesToPdf(files) {
+    if (!validateFilesSize(files)) return;
+    if (!validateFileCount(files, MAX_IMAGES_TO_PDF, "images")) return;
+
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
-    
+
     if (imageFiles.length !== files.length) {
         showImagesToPdfStatus('Images only! No sneaky PDFs allowed.', 'error');
         return;
     }
-    
+
     imageFiles.forEach(file => {
         if (!selectedImageFiles.some(f => f.name === file.name && f.size === file.size)) {
             selectedImageFiles.push(file);
         }
     });
-    
+
     updateImagesToPdfList();
     updateImagesToPdfButton();
     imagesToPdfInput.value = '';
 }
+
 
 function updateImagesToPdfList() {
     imagesToPdfList.innerHTML = '';
@@ -653,16 +700,23 @@ if (imageInput) {
 
 function handleImageSelect(e) {
     const file = e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            previewImg.src = e.target.result;
-            imageName.textContent = file.name;
-            imagePreview.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+        alert("Image too large. Max allowed size is 25MB.");
+        imageInput.value = "";
+        return;
     }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        previewImg.src = e.target.result;
+        imageName.textContent = file.name;
+        imagePreview.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
 }
+
 
 // ==================== UTILITY FUNCTIONS ====================
 
